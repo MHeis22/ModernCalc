@@ -71,6 +71,7 @@ struct TextContents {
         .init(name: "iqr", signature: "iqr(data)", description: "Calculates the interquartile range (Q3 - Q1) of a dataset."),
         .init(name: "isprime", signature: "isprime(integer)", description: "Checks if an integer is a prime number. Returns 1 for true, 0 for false."),
         .init(name: "lcm", signature: "lcm(a, b, ...)", description: "Finds the least common multiple of a list of integers or a vector/matrix. Also performs element-wise LCM between two arguments."),
+        .init(name: "linprog", signature: "linprog(f, A, b)", description: "Solves a linear programming problem to minimize f⋅x subject to the linear inequality constraints Ax ≤ b. Returns the optimal solution vector x."),
         .init(name: "lg", signature: "lg(number)", description: "Alias for the common (base-10) logarithm."),
         .init(name: "linreg", signature: "linreg(xValues, yValues)", description: "Performs a linear regression and returns the slope and y-intercept. Example: 'linreg(vector(1;2;3), vector(2; 3.9; 6.1))'"),
         .init(name: "linsolve", signature: "linsolve(A, b)", description: "Solves a system of linear equations Ax = b for x, where A is a matrix and b is a vector."),

@@ -368,6 +368,55 @@ extension Evaluator {
             
             return .plot(plotData)
         },
+        // --- ADDED: Linear Programming ---
+        "linprog": { args in
+            // Signature: linprog(f, A, b) -> minimizes f^T x subject to A x <= b
+            guard args.count == 3 else { throw MathError.incorrectArgumentCount(function: "linprog", expected: "3", found: args.count) }
+            
+            // 1. Parse f (Cost Vector)
+            let fVector: Vector
+            if case .vector(let v) = args[0] {
+                fVector = v
+            } else if case .matrix(let m) = args[0], (m.rows == 1 || m.columns == 1) {
+                fVector = Vector(values: m.values) // Simplified: assumes dimensionless for now
+            } else {
+                throw MathError.typeMismatch(expected: "Vector or 1D Matrix for f", found: args[0].typeName)
+            }
+            
+            // 2. Parse A (Inequality Matrix)
+            guard case .matrix(let aMatrix) = args[1] else {
+                throw MathError.typeMismatch(expected: "Matrix for A", found: args[1].typeName)
+            }
+            
+            // 3. Parse b (Inequality Vector)
+            let bVector: Vector
+            if case .vector(let v) = args[2] {
+                bVector = v
+            } else if case .matrix(let m) = args[2], (m.rows == 1 || m.columns == 1) {
+                bVector = Vector(values: m.values)
+            } else {
+                throw MathError.typeMismatch(expected: "Vector or 1D Matrix for b", found: args[2].typeName)
+            }
+            
+            // 4. Validate Dimensions
+            let numVars = fVector.dimension
+            let numConstraints = bVector.dimension
+            
+            guard aMatrix.rows == numConstraints else {
+                throw MathError.dimensionMismatch(reason: "Matrix A rows (\(aMatrix.rows)) must match b vector size (\(numConstraints))")
+            }
+            guard aMatrix.columns == numVars else {
+                throw MathError.dimensionMismatch(reason: "Matrix A columns (\(aMatrix.columns)) must match f vector size (\(numVars))")
+            }
+            
+            // 5. Solve using Simplex Method
+            do {
+                let solution = try performSimplex(f: fVector.values, A: aMatrix, b: bVector.values)
+                return .vector(Vector(values: solution))
+            } catch {
+                throw MathError.solverFailed(reason: "\(error)")
+            }
+        },
     ]
     
     static let singleArgumentFunctions: [String: (MathValue) throws -> MathValue] = [
@@ -1335,4 +1384,139 @@ fileprivate func performPercentile(values: [Double], p: Double) -> Double {
         let upperValue = values[upperIndex]
         return lowerValue + (rank - Double(lowerIndex)) * (upperValue - lowerValue)
     }
+}
+
+// MARK: - Simplex Algorithm for Linear Programming
+
+// Simplex Algorithm Implementation (Two-Phase Method for <= constraints)
+// Solves: minimize c^T * x subject to A * x <= b, x >= 0
+// To handle unrestricted variables or other forms, preprocessing is needed.
+// For simplicity in this app context, we assume standard form slack variables can be added.
+// This implementation assumes the input form: minimize f*x s.t. A*x <= b.
+// We add slack variables to convert A*x <= b to A*x + I*s = b, s >= 0.
+fileprivate func performSimplex(f: [Double], A: Matrix, b: [Double]) throws -> [Double] {
+    let numVars = f.count
+    let numConstraints = b.count
+    
+    // We need to handle negative b values (constraints >=) or simply pivot them.
+    // Standard Simplex tableau construction:
+    //      x1 ... xn  s1 ... sm   RHS
+    // z    c1...cn   0 ... 0     0
+    // s1   a11...a1n   1 ... 0     b1
+    // ...
+    // sm   am1...amn   0 ... 1     bm
+    
+    // Total columns = numVars (decision) + numConstraints (slack) + 1 (RHS)
+    let totalCols = numVars + numConstraints + 1
+    let totalRows = numConstraints + 1 // +1 for the objective function row
+    
+    var tableau = [[Double]](repeating: [Double](repeating: 0, count: totalCols), count: totalRows)
+    
+    // Fill objective row (Row 0)
+    // Minimization problem:
+    // Standard minimization tableau looks for most negative coefficient in reduced costs.
+    for j in 0..<numVars {
+        tableau[0][j] = f[j]
+    }
+    
+    // Fill constraint rows
+    for i in 0..<numConstraints {
+        // Constraint: a_i1*x1 + ... + a_in*xn <= b_i
+        // Becomes: a_i1*x1 + ... + s_i = b_i
+        
+        // Check for negative RHS. Simplex requires b >= 0.
+        // If b < 0, we multiply row by -1, changing <= to >=.
+        // This makes it a Big-M or Two-Phase problem.
+        // For "Easy to use", we might implement a Dual Simplex or just standard Simplex and throw error if b < 0.
+        if b[i] < 0 {
+            throw MathError.solverFailed(reason: "Constraints with negative RHS (Ax >= b) not yet supported in this basic solver.")
+        }
+        
+        for j in 0..<numVars {
+            tableau[i+1][j] = A[i, j]
+        }
+        
+        // Slack variable column (identity matrix part)
+        tableau[i+1][numVars + i] = 1.0
+        
+        // RHS column
+        tableau[i+1][totalCols - 1] = b[i]
+    }
+    
+    // Basic variables tracking (stores column index for basis of each row 1..m)
+    // Initially, slack variables are the basis. Slack indices are numVars, numVars+1, ...
+    var basis = Array(numVars..<(numVars + numConstraints))
+    
+    // Iterations
+    let maxIterations = 1000
+    for _ in 0..<maxIterations {
+        // 1. Pivot Column Selection (Entering Variable)
+        // For MINIMIZATION with objective row z = c^T x, we look for the most NEGATIVE coefficient.
+        // This corresponds to the variable that will reduce the cost the most (steepest descent).
+        
+        var pivotCol = -1
+        var minCoeff = -1e-9 // Tolerance for negative check
+        
+        for j in 0..<(totalCols - 1) { // Ignore RHS
+            if tableau[0][j] < minCoeff {
+                minCoeff = tableau[0][j]
+                pivotCol = j
+            }
+        }
+        
+        if pivotCol == -1 {
+            break // Optimal solution found (no negative reduced costs to improve minimization)
+        }
+        
+        // 2. Pivot Row Selection (Leaving Variable) using Minimum Ratio Test
+        var pivotRow = -1
+        var minRatio = Double.infinity
+        
+        for i in 1...numConstraints {
+            let val = tableau[i][pivotCol]
+            if val > 1e-9 { // Only consider positive entries
+                let rhs = tableau[i][totalCols - 1]
+                let ratio = rhs / val
+                if ratio < minRatio {
+                    minRatio = ratio
+                    pivotRow = i
+                }
+            }
+        }
+        
+        if pivotRow == -1 {
+            throw MathError.solverFailed(reason: "Unbounded solution detected.")
+        }
+        
+        // 3. Perform Pivot Operation
+        basis[pivotRow - 1] = pivotCol
+        
+        let pivotElement = tableau[pivotRow][pivotCol]
+        
+        // Normalize pivot row
+        for j in 0..<totalCols {
+            tableau[pivotRow][j] /= pivotElement
+        }
+        
+        // Eliminate pivot column entries in other rows
+        for i in 0...numConstraints {
+            if i != pivotRow {
+                let factor = tableau[i][pivotCol]
+                for j in 0..<totalCols {
+                    tableau[i][j] -= factor * tableau[pivotRow][j]
+                }
+            }
+        }
+    }
+    
+    // Extract Solution
+    var solution = [Double](repeating: 0, count: numVars)
+    for i in 0..<numConstraints {
+        let basisVarIndex = basis[i]
+        if basisVarIndex < numVars { // If a decision variable is in the basis
+            solution[basisVarIndex] = tableau[i+1][totalCols - 1]
+        }
+    }
+    
+    return solution
 }
