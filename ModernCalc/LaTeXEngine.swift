@@ -155,6 +155,26 @@ struct LaTeXEngine {
             if functionCallNode.name == "norm" {
                 return "\\left\\| \(args) \\right\\|"
             }
+            // FIX: Special handling for determinant
+            if functionCallNode.name == "det" {
+                return "\\left| \(args) \\right|"
+            }
+            // FIX: Special handling for inverse
+            if functionCallNode.name == "inv" {
+                return "{\(args)}^{-1}"
+            }
+            // FIX: Special handling for rank
+            if functionCallNode.name == "rank" {
+                return "\\operatorname{rank}\\left(\(args)\\right)"
+            }
+            // FIX: Special handling for trace
+            if functionCallNode.name == "trace" {
+                return "\\operatorname{tr}\\left(\(args)\\right)"
+            }
+            // FIX: Special handling for transpose function call (as alternative to operator)
+            if functionCallNode.name == "transpose" {
+                return "{\(args)}^T"
+            }
 
             if let latexFunc = functionMap[functionCallNode.name] {
                 return "\(latexFunc){\(args)}"
@@ -533,9 +553,8 @@ struct LaTeXEngine {
         "sinh": "\\sinh", "cosh": "\\cosh", "tanh": "\\tanh", "coth": "\\coth", "sech": "\\operatorname{sech}", "csch": "\\operatorname{csch}",
         "asinh": "\\operatorname{arsinh}", "acosh": "\\operatorname{arcosh}", "atanh": "\\operatorname{artanh}",
         "asech": "\\operatorname{arsech}", "acsch": "\\operatorname{arcsch}", "acoth": "\\operatorname{arcoth}",
-        "log": "\\log", "lg": "\\lg", "ln": "\\ln", "det": "\\det", "sqrt": "\\sqrt",
-        // Removed "abs": "\\left|", it is now handled in the switch case.
-        "rank": "\\operatorname{rank}", "trace": "\\operatorname{Tr}"
+        "log": "\\log", "lg": "\\lg", "ln": "\\ln", "sqrt": "\\sqrt"
+        // Removed explicit mappings for det, rank, trace, abs as they are now handled in the switch case for better control
     ]
 
 
@@ -578,7 +597,7 @@ struct LaTeXEngine {
         let preferredSymbols = ["m", "s", "kg", "A", "K", "mol", "cd", "N", "J", "W", "Pa", "Hz", "C", "V", "Ohm", "F", "H", "T", "L", "eV", "cal", "bar", "g"]
 
         var potentialMatches: [UnitDefinition] = []
-        for (symbol, unitDef) in UnitStore.units {
+        for (_, unitDef) in UnitStore.units {
             if unitDef.dimensions == dimensions {
                 potentialMatches.append(unitDef)
             }

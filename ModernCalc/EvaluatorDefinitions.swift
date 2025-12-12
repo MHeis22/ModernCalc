@@ -766,6 +766,26 @@ extension Evaluator {
             return .vector(try m.getrow(index: Int(idx)))
         },
         // ... (retained as previous) ...
+        // --- ADDED: count functions ---
+        "count": { data, value in
+            let doubles = try extractDoubles(from: data)
+            let target = try value.asScalar()
+            let count = doubles.filter { $0 == target }.count
+            return .dimensionless(Double(count))
+        },
+        "countabove": { data, threshold in
+            let doubles = try extractDoubles(from: data)
+            let limit = try threshold.asScalar()
+            let count = doubles.filter { $0 > limit }.count
+            return .dimensionless(Double(count))
+        },
+        "countbelow": { data, threshold in
+            let doubles = try extractDoubles(from: data)
+            let limit = try threshold.asScalar()
+            let count = doubles.filter { $0 < limit }.count
+            return .dimensionless(Double(count))
+        },
+        // ... (other two-arg functions) ...
         "quartile": { data, q_val in
             let values = try extractDoubles(from: data).sorted()
             guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "quartile") }

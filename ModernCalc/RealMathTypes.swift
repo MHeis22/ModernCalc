@@ -24,12 +24,12 @@ struct UnitValue: Equatable, Codable {
     }
 
     static func + (lhs: UnitValue, rhs: UnitValue) throws -> UnitValue {
-        guard lhs.dimensions == rhs.dimensions else { throw MathError.dimensionMismatch(reason: "Cannot add quantities with different units.") }
+        guard lhs.dimensions == rhs.dimensions else { throw MathError.dimensionMismatch(reason: "Cannot add quantities with different units") }
         return UnitValue.create(value: lhs.value + rhs.value, dimensions: lhs.dimensions)
     }
 
     static func - (lhs: UnitValue, rhs: UnitValue) throws -> UnitValue {
-        guard lhs.dimensions == rhs.dimensions else { throw MathError.dimensionMismatch(reason: "Cannot subtract quantities with different units.") }
+        guard lhs.dimensions == rhs.dimensions else { throw MathError.dimensionMismatch(reason: "Cannot subtract quantities with different units") }
         return UnitValue.create(value: lhs.value - rhs.value, dimensions: lhs.dimensions)
     }
     
@@ -70,7 +70,7 @@ struct UncertainValue: Equatable, Codable {
     }
 
     static func + (lhs: UncertainValue, rhs: UncertainValue) throws -> UncertainValue {
-        guard lhs.dimensions == rhs.dimensions else { throw MathError.dimensionMismatch(reason: "Cannot add uncertain values with different units.") }
+        guard lhs.dimensions == rhs.dimensions else { throw MathError.dimensionMismatch(reason: "Cannot add uncertain values with different units") }
         return UncertainValue(
             value: lhs.value + rhs.value,
             randomUncertainty: hypot(lhs.randomUncertainty, rhs.randomUncertainty),
@@ -80,7 +80,7 @@ struct UncertainValue: Equatable, Codable {
     }
 
     static func - (lhs: UncertainValue, rhs: UncertainValue) throws -> UncertainValue {
-        guard lhs.dimensions == rhs.dimensions else { throw MathError.dimensionMismatch(reason: "Cannot subtract uncertain values with different units.") }
+        guard lhs.dimensions == rhs.dimensions else { throw MathError.dimensionMismatch(reason: "Cannot subtract uncertain values with different units") }
         return UncertainValue(
             value: lhs.value - rhs.value,
             randomUncertainty: hypot(lhs.randomUncertainty, rhs.randomUncertainty),
@@ -177,7 +177,7 @@ struct Vector: Equatable, Codable {
     
     // Optimized Dot Product
     func dot(with other: Vector) throws -> UnitValue {
-        guard self.dimension == other.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have same dimension for dot product.") }
+        guard self.dimension == other.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have same dimension for dot product") }
         
         let result = vDSP.dot(self.values, other.values)
         let newDimensions = self.dimensions.merging(other.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
@@ -185,7 +185,7 @@ struct Vector: Equatable, Codable {
     }
     
     func cross(with other: Vector) throws -> Vector {
-        guard self.dimension == 3 && other.dimension == 3 else { throw MathError.dimensionMismatch(reason: "Cross product defined for 3D vectors only.") }
+        guard self.dimension == 3 && other.dimension == 3 else { throw MathError.dimensionMismatch(reason: "Cross product defined for 3D vectors only") }
         // Cross product is small enough (3 elements) that manual calculation is faster than vDSP setup overhead.
         let u = self.values; let v = other.values
         let newValues = [
@@ -198,14 +198,14 @@ struct Vector: Equatable, Codable {
     }
     
     func hadamard(with other: Vector) throws -> Vector {
-        guard self.dimension == other.dimension else { throw MathError.dimensionMismatch(reason: "Dimension mismatch for hadamard product.") }
+        guard self.dimension == other.dimension else { throw MathError.dimensionMismatch(reason: "Dimension mismatch for hadamard product") }
         let result = vDSP.multiply(self.values, other.values)
         let newDimensions = self.dimensions.merging(other.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
         return Vector(values: result, dimensions: newDimensions)
     }
 
     func hadamardDivision(with other: Vector) throws -> Vector {
-        guard self.dimension == other.dimension else { throw MathError.dimensionMismatch(reason: "Dimension mismatch for element-wise division.") }
+        guard self.dimension == other.dimension else { throw MathError.dimensionMismatch(reason: "Dimension mismatch for element-wise division") }
         if other.values.contains(0) { throw MathError.divisionByZero }
         let result = vDSP.divide(self.values, other.values)
         let newDimensions = self.dimensions.merging(other.dimensions.mapValues { -$0 }, uniquingKeysWith: +).filter { $0.value != 0 }
@@ -228,7 +228,7 @@ struct Vector: Equatable, Codable {
     }
     
     func modifying(at index: Int, with scalar: Double, operation: (Double, Double) -> Double) throws -> Vector {
-        guard index >= 0 && index < self.dimension else { throw MathError.dimensionMismatch(reason: "Index out of bounds.") }
+        guard index >= 0 && index < self.dimension else { throw MathError.dimensionMismatch(reason: "Index out of bounds") }
         var newValues = self.values
         newValues[index] = operation(newValues[index], scalar)
         return Vector(values: newValues, dimensions: self.dimensions)
@@ -238,7 +238,7 @@ struct Vector: Equatable, Codable {
         var newValues: [Double] = []
         newValues.reserveCapacity(indices.count)
         for index in indices {
-            guard index >= 1 && index <= self.dimension else { throw MathError.dimensionMismatch(reason: "Index out of bounds.") }
+            guard index >= 1 && index <= self.dimension else { throw MathError.dimensionMismatch(reason: "Index out of bounds") }
             newValues.append(self.values[index - 1])
         }
         if newValues.count == 1 { return .unitValue(UnitValue(value: newValues[0], dimensions: self.dimensions)) }
@@ -247,19 +247,19 @@ struct Vector: Equatable, Codable {
 
     // vDSP Optimizations for arithmetic
     static func + (lhs: Vector, rhs: Vector) throws -> Vector {
-        guard lhs.dimension == rhs.dimension else { throw MathError.dimensionMismatch(reason: "Dimension mismatch.") }
-        guard lhs.dimensions == rhs.dimensions else { throw MathError.dimensionMismatch(reason: "Unit mismatch.") }
+        guard lhs.dimension == rhs.dimension else { throw MathError.dimensionMismatch(reason: "Dimension mismatch") }
+        guard lhs.dimensions == rhs.dimensions else { throw MathError.dimensionMismatch(reason: "Unit mismatch") }
         return Vector(values: vDSP.add(lhs.values, rhs.values), dimensions: lhs.dimensions)
     }
     static func - (lhs: Vector, rhs: Vector) throws -> Vector {
-        guard lhs.dimension == rhs.dimension else { throw MathError.dimensionMismatch(reason: "Dimension mismatch.") }
-        guard lhs.dimensions == rhs.dimensions else { throw MathError.dimensionMismatch(reason: "Unit mismatch.") }
+        guard lhs.dimension == rhs.dimension else { throw MathError.dimensionMismatch(reason: "Dimension mismatch") }
+        guard lhs.dimensions == rhs.dimensions else { throw MathError.dimensionMismatch(reason: "Unit mismatch") }
         return Vector(values: vDSP.subtract(lhs.values, rhs.values), dimensions: lhs.dimensions)
     }
 
     static func * (lhs: Vector, rhs: Matrix) throws -> Vector {
         // v * M -> 1xN * NxM -> 1xM
-        guard lhs.dimension == rhs.rows else { throw MathError.dimensionMismatch(reason: "v*M dimension mismatch.") }
+        guard lhs.dimension == rhs.rows else { throw MathError.dimensionMismatch(reason: "v*M dimension mismatch") }
         
         // REPLACEMENT FOR DEPRECATED cblas_dgemv
         // Treat vector as 1xN matrix.
@@ -370,7 +370,7 @@ struct Matrix: Equatable, Codable {
 
     // Optimized Determinant using LU Decomposition (dgetrf) - O(N^3)
     func determinant() throws -> UnitValue {
-        guard rows == columns else { throw MathError.dimensionMismatch(reason: "Square matrix required.") }
+        guard rows == columns else { throw MathError.dimensionMismatch(reason: "Square matrix required") }
         
         var a = values
         // CHANGED: Int32 -> Int for ILP64
@@ -403,7 +403,7 @@ struct Matrix: Equatable, Codable {
 
     // Optimized Inverse using LU Decomposition (dgetrf + dgetri) - O(N^3)
     func inverse() throws -> Matrix {
-        guard rows == columns else { throw MathError.dimensionMismatch(reason: "Square matrix required.") }
+        guard rows == columns else { throw MathError.dimensionMismatch(reason: "Square matrix required") }
         
         var a = values // Row-Major
         // CHANGED: Int32 -> Int for ILP64
@@ -439,7 +439,7 @@ struct Matrix: Equatable, Codable {
     }
     
     func trace() throws -> UnitValue {
-        guard rows == columns else { throw MathError.dimensionMismatch(reason: "Square matrix required.") }
+        guard rows == columns else { throw MathError.dimensionMismatch(reason: "Square matrix required") }
         // Sum of diagonal elements
         var sum = 0.0
         for i in 0..<rows { sum += self[i, i] }
@@ -486,14 +486,14 @@ struct Matrix: Equatable, Codable {
     }
 
     func hadamard(with other: Matrix) throws -> Matrix {
-        guard rows == other.rows && columns == other.columns else { throw MathError.dimensionMismatch(reason: "Size mismatch.") }
+        guard rows == other.rows && columns == other.columns else { throw MathError.dimensionMismatch(reason: "Size mismatch") }
         let result = vDSP.multiply(self.values, other.values)
         let newDims = self.dimensions.merging(other.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
         return Matrix(values: result, rows: rows, columns: columns, dimensions: newDims)
     }
     
     func hadamardDivision(with other: Matrix) throws -> Matrix {
-        guard rows == other.rows && columns == other.columns else { throw MathError.dimensionMismatch(reason: "Size mismatch.") }
+        guard rows == other.rows && columns == other.columns else { throw MathError.dimensionMismatch(reason: "Size mismatch") }
         if other.values.contains(0) { throw MathError.divisionByZero }
         let result = vDSP.divide(self.values, other.values)
         let newDims = self.dimensions.merging(other.dimensions.mapValues { -$0 }, uniquingKeysWith: +).filter { $0.value != 0 }
@@ -502,7 +502,7 @@ struct Matrix: Equatable, Codable {
     
     func getcolumn(index: Int) throws -> Vector {
         let j = index - 1
-        guard j >= 0 && j < columns else { throw MathError.dimensionMismatch(reason: "Index out of bounds.") }
+        guard j >= 0 && j < columns else { throw MathError.dimensionMismatch(reason: "Index out of bounds") }
         
         // REPLACEMENT FOR DEPRECATED cblas_dcopy
         // We need to extract a strided column.
@@ -517,7 +517,7 @@ struct Matrix: Equatable, Codable {
     
     func getrow(index: Int) throws -> Vector {
         let i = index - 1
-        guard i >= 0 && i < rows else { throw MathError.dimensionMismatch(reason: "Index out of bounds.") }
+        guard i >= 0 && i < rows else { throw MathError.dimensionMismatch(reason: "Index out of bounds") }
         let start = i * columns
         let rowValues = Array(values[start..<(start + columns)])
         return Vector(values: rowValues, dimensions: self.dimensions)
@@ -527,9 +527,9 @@ struct Matrix: Equatable, Codable {
         var newValues = [Double]()
         newValues.reserveCapacity(rowIndices.count * colIndices.count)
         for r in rowIndices {
-            guard r >= 1 && r <= rows else { throw MathError.dimensionMismatch(reason: "Row index out of bounds.") }
+            guard r >= 1 && r <= rows else { throw MathError.dimensionMismatch(reason: "Row index out of bounds") }
             for c in colIndices {
-                guard c >= 1 && c <= columns else { throw MathError.dimensionMismatch(reason: "Col index out of bounds.") }
+                guard c >= 1 && c <= columns else { throw MathError.dimensionMismatch(reason: "Col index out of bounds") }
                 newValues.append(self[r - 1, c - 1])
             }
         }
@@ -539,14 +539,14 @@ struct Matrix: Equatable, Codable {
     
     // Matrix Arithmetic using vDSP
     static func + (lhs: Matrix, rhs: Matrix) throws -> Matrix {
-        guard lhs.rows == rhs.rows && lhs.columns == rhs.columns else { throw MathError.dimensionMismatch(reason: "Dimension mismatch.") }
-        guard lhs.dimensions == rhs.dimensions else { throw MathError.dimensionMismatch(reason: "Unit mismatch.") }
+        guard lhs.rows == rhs.rows && lhs.columns == rhs.columns else { throw MathError.dimensionMismatch(reason: "Dimension mismatch") }
+        guard lhs.dimensions == rhs.dimensions else { throw MathError.dimensionMismatch(reason: "Unit mismatch") }
         return Matrix(values: vDSP.add(lhs.values, rhs.values), rows: lhs.rows, columns: lhs.columns, dimensions: lhs.dimensions)
     }
 
     static func - (lhs: Matrix, rhs: Matrix) throws -> Matrix {
-        guard lhs.rows == rhs.rows && lhs.columns == rhs.columns else { throw MathError.dimensionMismatch(reason: "Dimension mismatch.") }
-        guard lhs.dimensions == rhs.dimensions else { throw MathError.dimensionMismatch(reason: "Unit mismatch.") }
+        guard lhs.rows == rhs.rows && lhs.columns == rhs.columns else { throw MathError.dimensionMismatch(reason: "Dimension mismatch") }
+        guard lhs.dimensions == rhs.dimensions else { throw MathError.dimensionMismatch(reason: "Unit mismatch") }
         return Matrix(values: vDSP.subtract(lhs.values, rhs.values), rows: lhs.rows, columns: lhs.columns, dimensions: lhs.dimensions)
     }
 
@@ -563,7 +563,7 @@ struct Matrix: Equatable, Codable {
             return Matrix(values: vDSP.multiply(s, lhs.values), rows: lhs.rows, columns: lhs.columns, dimensions: newDims)
         }
         
-        guard lhs.columns == rhs.rows else { throw MathError.dimensionMismatch(reason: "Matrix multiplication A*B requires Cols(A) == Rows(B).") }
+        guard lhs.columns == rhs.rows else { throw MathError.dimensionMismatch(reason: "Matrix multiplication A*B requires Cols(A) == Rows(B)") }
         
         // vDSP_mmulD performs matrix multiplication.
         // C = A * B
@@ -584,7 +584,7 @@ struct Matrix: Equatable, Codable {
 
     static func * (lhs: Matrix, rhs: Vector) throws -> Vector {
         // M * v -> M rows, P cols * P vector -> M vector
-        guard lhs.columns == rhs.dimension else { throw MathError.dimensionMismatch(reason: "Dimension mismatch M*v.") }
+        guard lhs.columns == rhs.dimension else { throw MathError.dimensionMismatch(reason: "Dimension mismatch M*v") }
         
         // REPLACEMENT FOR DEPRECATED cblas_dgemv
         // Using vDSP_mmulD treating Vector as Px1 Matrix
