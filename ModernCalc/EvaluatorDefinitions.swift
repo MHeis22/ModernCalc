@@ -228,10 +228,29 @@ extension Evaluator {
             return .vector(Vector(values: values))
         },
         "polyfit": { args in
-            guard args.count == 3 else { throw MathError.incorrectArgumentCount(function: "polyfit", expected: "3", found: args.count) }
-            let xVec = try args[0].asVector(for: "polyfit")
-            let yVec = try args[1].asVector(for: "polyfit")
-            let degree = try args[2].asScalar()
+            // FIX: Allow 2 arguments (Matrix, Degree) OR 3 arguments (xVec, yVec, Degree)
+            let xVec: Vector
+            let yVec: Vector
+            let degree: Double
+            
+            if args.count == 2 {
+                // Matrix mode: polyfit(matrix, degree)
+                // Assumes a 2-column matrix: Column 1 = X, Column 2 = Y
+                guard case .matrix(let m) = args[0] else { throw MathError.typeMismatch(expected: "Matrix", found: args[0].typeName) }
+                guard m.columns == 2 else { throw MathError.dimensionMismatch(reason: "polyfit matrix argument must have exactly 2 columns (x and y)") }
+                
+                xVec = try m.getcolumn(index: 1)
+                yVec = try m.getcolumn(index: 2)
+                degree = try args[1].asScalar()
+            } else if args.count == 3 {
+                // Vector mode: polyfit(x, y, degree)
+                xVec = try args[0].asVector(for: "polyfit")
+                yVec = try args[1].asVector(for: "polyfit")
+                degree = try args[2].asScalar()
+            } else {
+                throw MathError.incorrectArgumentCount(function: "polyfit", expected: "2 or 3", found: args.count)
+            }
+            
             let coeffs = try performPolynomialFit(x: xVec, y: yVec, degree: degree)
             return .polynomialFit(coefficients: coeffs)
         },
@@ -733,6 +752,19 @@ extension Evaluator {
     // Helper functions for this extension...
     
     static let twoArgumentFunctions: [String: (MathValue, MathValue) throws -> MathValue] = [
+        // FIX: Add getcolumn and getrow
+        "getcolumn": { matrixVal, indexVal in
+            guard case .matrix(let m) = matrixVal else { throw MathError.typeMismatch(expected: "Matrix", found: matrixVal.typeName) }
+            let idx = try indexVal.asScalar()
+            guard idx.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.typeMismatch(expected: "Integer index", found: "Non-integer") }
+            return .vector(try m.getcolumn(index: Int(idx)))
+        },
+        "getrow": { matrixVal, indexVal in
+            guard case .matrix(let m) = matrixVal else { throw MathError.typeMismatch(expected: "Matrix", found: matrixVal.typeName) }
+            let idx = try indexVal.asScalar()
+            guard idx.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.typeMismatch(expected: "Integer index", found: "Non-integer") }
+            return .vector(try m.getrow(index: Int(idx)))
+        },
         // ... (retained as previous) ...
         "quartile": { data, q_val in
             let values = try extractDoubles(from: data).sorted()

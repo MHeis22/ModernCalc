@@ -32,6 +32,8 @@ class Lexer {
     private var currentIndex: String.Index
     private let decimalSeparator: DecimalSeparator
     private var lastTokenType: TokenType?
+    // Added constant to avoid duplication
+    private let greekLetters = "αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ"
 
     init(input: String, decimalSeparator: DecimalSeparator = .period) {
         self.input = input
@@ -41,7 +43,6 @@ class Lexer {
     
     func tokenize() -> [Token] {
         var tokens: [Token] = []
-        let greekLetters = "αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ"
         let argumentSeparator = (decimalSeparator == .period) ? Character(",") : Character(".")
         
         while let char = peek() {
@@ -57,7 +58,8 @@ class Lexer {
                 continue
             }
             
-            if char.isLetter || greekLetters.contains(char) || char == "_" {
+            // Use self.greekLetters constant here
+            if char.isLetter || self.greekLetters.contains(char) || char == "_" {
                 let token: Token
                 if char == "j" && peek(offset: 1) == "'" {
                     advance(); advance()
@@ -316,8 +318,8 @@ class Lexer {
 
     private func lexIdentifier() -> Token {
         let startIndex = currentIndex
-        let greekLetters = "αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ"
-        while let char = peek(), char.isLetter || char.isNumber || greekLetters.contains(char) || char == "_" {
+        // Use self.greekLetters constant here
+        while let char = peek(), char.isLetter || char.isNumber || self.greekLetters.contains(char) || char == "_" {
             advance()
         }
         let identifierString = String(input[startIndex..<currentIndex])

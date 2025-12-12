@@ -146,6 +146,15 @@ struct LaTeXEngine {
                  // Use dagger for conjugate transpose
                 return "{\(args)}^{\\dagger}"
             }
+            
+            // FIX: Special handling for abs to ensure closing pipe
+            if functionCallNode.name == "abs" {
+                return "\\left| \(args) \\right|"
+            }
+            // FIX: Special handling for norm (double bars)
+            if functionCallNode.name == "norm" {
+                return "\\left\\| \(args) \\right\\|"
+            }
 
             if let latexFunc = functionMap[functionCallNode.name] {
                 return "\(latexFunc){\(args)}"
@@ -524,7 +533,8 @@ struct LaTeXEngine {
         "sinh": "\\sinh", "cosh": "\\cosh", "tanh": "\\tanh", "coth": "\\coth", "sech": "\\operatorname{sech}", "csch": "\\operatorname{csch}",
         "asinh": "\\operatorname{arsinh}", "acosh": "\\operatorname{arcosh}", "atanh": "\\operatorname{artanh}",
         "asech": "\\operatorname{arsech}", "acsch": "\\operatorname{arcsch}", "acoth": "\\operatorname{arcoth}",
-        "log": "\\log", "lg": "\\lg", "ln": "\\ln", "det": "\\det", "sqrt": "\\sqrt", "abs": "\\left|", // Use | for abs
+        "log": "\\log", "lg": "\\lg", "ln": "\\ln", "det": "\\det", "sqrt": "\\sqrt",
+        // Removed "abs": "\\left|", it is now handled in the switch case.
         "rank": "\\operatorname{rank}", "trace": "\\operatorname{Tr}"
     ]
 
@@ -568,7 +578,7 @@ struct LaTeXEngine {
         let preferredSymbols = ["m", "s", "kg", "A", "K", "mol", "cd", "N", "J", "W", "Pa", "Hz", "C", "V", "Ohm", "F", "H", "T", "L", "eV", "cal", "bar", "g"]
 
         var potentialMatches: [UnitDefinition] = []
-        for (_, unitDef) in UnitStore.units {
+        for (symbol, unitDef) in UnitStore.units {
             if unitDef.dimensions == dimensions {
                 potentialMatches.append(unitDef)
             }
