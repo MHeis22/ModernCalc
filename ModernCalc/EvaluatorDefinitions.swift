@@ -159,6 +159,22 @@ extension Evaluator {
                 return abs(a * b) / performGcd(a, b)
             }
             return try performAggregateIntegerOperation(args: args, initialValue: 1, operation: lcmOp)
+        },
+        "nPr": { args in
+            guard args.count == 2 else { throw MathError.incorrectArgumentCount(function: "nPr", expected: "2", found: args.count) }
+            let n = try args[0].asScalar(); let k = try args[1].asScalar()
+            guard n.truncatingRemainder(dividingBy: 1) == 0 && k.truncatingRemainder(dividingBy: 1) == 0 else {
+                throw MathError.unsupportedOperation(op: "nPr", typeA: "arguments must be non-negative integers", typeB: nil)
+            }
+            return .dimensionless(try permutations(n: n, k: k))
+        },
+        "nCr": { args in
+            guard args.count == 2 else { throw MathError.incorrectArgumentCount(function: "nCr", expected: "2", found: args.count) }
+            let n = try args[0].asScalar(); let k = try args[1].asScalar()
+            guard n.truncatingRemainder(dividingBy: 1) == 0 && k.truncatingRemainder(dividingBy: 1) == 0 else {
+                throw MathError.unsupportedOperation(op: "nCr", typeA: "arguments must be non-negative integers", typeB: nil)
+            }
+            return .dimensionless(try combinations(n: n, k: k))
         }
     ]
     
@@ -1228,6 +1244,7 @@ fileprivate func extractAndConvertUnitValues(from args: [MathValue]) throws -> (
 
 
 fileprivate func performGcd(_ a: Double, _ b: Double) -> Double {
+    if b == 0 { return abs(a) }
     let r = a.truncatingRemainder(dividingBy: b)
     if r != 0 {
         return performGcd(b, r)
