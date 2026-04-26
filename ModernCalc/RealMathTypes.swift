@@ -384,32 +384,29 @@ struct Matrix: Equatable, Codable {
     // Optimized Determinant using LU Decomposition (dgetrf) - O(N^3)
     func determinant() throws -> UnitValue {
         guard rows == columns else { throw MathError.dimensionMismatch(reason: "Square matrix required") }
-        
-        var a = values
-        // CHANGED: Int32 -> Int for ILP64
+
+        // Transpose row-major data to get the correct column-major layout for LAPACK
+        var a = self.transpose().values
         var pivots = [Int](repeating: 0, count: rows)
         var info: Int = 0
         var m = Int(rows)
         var n = Int(columns)
         var lda = m
-        
-        // Perform LU decomposition (Standard LAPACK dgetrf_)
+
         dgetrf_(&m, &n, &a, &lda, &pivots, &info)
-        
+
         if info < 0 { throw MathError.solverFailed(reason: "Illegal value in LAPACK dgetrf") }
-        
-        // Determinant is product of diagonal elements of U (stored in 'a') * (-1)^swaps
+
+        // Determinant is the product of the U diagonal, with sign from pivot swaps
         var det = 1.0
-        for i in 0..<rows { det *= a[i * rows + i] } // accessing column-major diagonal
-        
-        // Account for pivot swaps
+        for i in 0..<rows { det *= a[i + i * rows] } // column-major diagonal: i + i*lda
+
         var swaps = 0
         for i in 0..<rows {
-            // CHANGED: Int32 -> Int
             if pivots[i] != Int(i + 1) { swaps += 1 }
         }
         if swaps % 2 != 0 { det = -det }
-        
+
         let newDims = self.dimensions.mapValues { $0 * Double(rows) }.filter { $0.value != 0 }
         return UnitValue.create(value: det, dimensions: newDims)
     }
@@ -417,32 +414,32 @@ struct Matrix: Equatable, Codable {
     // Optimized Inverse using LU Decomposition (dgetrf + dgetri) - O(N^3)
     func inverse() throws -> Matrix {
         guard rows == columns else { throw MathError.dimensionMismatch(reason: "Square matrix required") }
-        
-        var a = values // Row-Major
-        // CHANGED: Int32 -> Int for ILP64
+
+        // Transpose row-major data to get the correct column-major layout for LAPACK.
+        // After LAPACK computes A^-1 in column-major, reading it back as row-major gives
+        // (A^-1)^T, so we transpose the result to recover A^-1.
+        var a = self.transpose().values
         var m = Int(rows)
         var n = Int(columns)
         var lda = m
         var pivots = [Int](repeating: 0, count: rows)
         var info: Int = 0
-        
-        // LU Factorization (Standard LAPACK dgetrf_)
+
         dgetrf_(&m, &n, &a, &lda, &pivots, &info)
         if info != 0 { throw MathError.unsupportedOperation(op: "inverse", typeA: "Singular Matrix", typeB: nil) }
-        
-        // Inverse calculation
+
         var workspace = [Double](repeating: 0, count: rows * rows)
         var lwork = Int(rows * rows)
         var n_getri = m
         var lda_getri = m
-        
-        // Standard LAPACK dgetri_
+
         dgetri_(&n_getri, &a, &lda_getri, &pivots, &workspace, &lwork, &info)
-        
+
         if info != 0 { throw MathError.solverFailed(reason: "Inversion failed") }
-        
+
         let newDims = self.dimensions.mapValues { -$0 }.filter { $0.value != 0 }
-        return Matrix(values: a, rows: rows, columns: columns, dimensions: newDims)
+        // Column-major A^-1 read as row-major yields (A^-1)^T; transpose to get A^-1.
+        return Matrix(values: a, rows: rows, columns: columns, dimensions: newDims).transpose()
     }
 
     func transpose() -> Matrix {
@@ -466,10 +463,7 @@ struct Matrix: Equatable, Codable {
     }
 
     func rank() -> Int {
-        // Optimized rank using Singular Value Decomposition (dgesvd)
-        // Rank = number of singular values > tolerance
-        var a = values
-        // CHANGED: Int32 -> Int for ILP64
+        var a = self.transpose().values
         var m = Int(rows)
         var n = Int(columns)
         var s = [Double](repeating: 0, count: min(rows, columns))

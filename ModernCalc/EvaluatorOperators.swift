@@ -78,7 +78,11 @@ extension Evaluator {
         case (.unitValue(let l), .unitValue(let r)): return .unitValue(try performUnitUnitOp(op.rawValue, l, r))
         case (.unitValue(let l), .dimensionless(let r)): return .unitValue(try performUnitUnitOp(op.rawValue, l, .dimensionless(r)))
         case (.dimensionless(let l), .unitValue(let r)): return .unitValue(try performUnitUnitOp(op.rawValue, .dimensionless(l), r))
-        case (.dimensionless(let l), .dimensionless(let r)): return .dimensionless(try performDimensionlessOp(op.rawValue, l, r))
+        case (.dimensionless(let l), .dimensionless(let r)):
+            if op.rawValue == "^" && l < 0 && r.truncatingRemainder(dividingBy: 1) != 0 {
+                return .complex(try Complex(real: l, imaginary: 0).pow(Complex(real: r, imaginary: 0)))
+            }
+            return .dimensionless(try performDimensionlessOp(op.rawValue, l, r))
 
         // --- Uncertainty propagation rules now handle units ---
         case (.uncertain(let l), .uncertain(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, l, r))

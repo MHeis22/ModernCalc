@@ -229,27 +229,27 @@ struct ComplexMatrix: Equatable, Codable {
     // Optimized Determinant (LAPACK)
     func determinant() throws -> (value: Complex, dimensions: UnitDimension) {
         guard rows == columns else { throw MathError.dimensionMismatch(reason: "Matrix must be square.") }
-        
-        var a = values
+
+        // Transpose row-major data to get the correct column-major layout for LAPACK
+        var a = self.transpose().values
         var m = Int(rows)
         var n = Int(columns)
         var lda = m
         var pivots = [Int](repeating: 0, count: rows)
         var info: Int = 0
-        
-        // Using OpaquePointer to satisfy compiler with Complex type
+
         a.withUnsafeMutableBufferPointer { buffer in
             zgetrf_(&m, &n, OpaquePointer(buffer.baseAddress!), &lda, &pivots, &info)
         }
-        
+
         if info < 0 { throw MathError.solverFailed(reason: "Illegal value in LAPACK zgetrf") }
         if info > 0 { return (.zero, self.dimensions.mapValues { $0 * Double(self.rows) }.filter { $0.value != 0 }) }
-        
+
         var det = Complex(real: 1, imaginary: 0)
         for i in 0..<rows {
-            det = det * a[i * columns + i]
+            det = det * a[i + i * rows] // column-major diagonal: i + i*lda
         }
-        
+
         var swaps = 0
         for i in 0..<rows {
             if pivots[i] != Int(i + 1) { swaps += 1 }
@@ -257,7 +257,7 @@ struct ComplexMatrix: Equatable, Codable {
         if swaps % 2 != 0 {
             det = det * Complex(real: -1, imaginary: 0)
         }
-        
+
         let newDimensions = self.dimensions.mapValues { $0 * Double(self.rows) }.filter { $0.value != 0 }
         return (det, newDimensions)
     }
@@ -265,35 +265,37 @@ struct ComplexMatrix: Equatable, Codable {
     // Optimized Inverse (LAPACK)
     func inverse() throws -> ComplexMatrix {
         guard rows == columns else { throw MathError.dimensionMismatch(reason: "Matrix must be square.") }
-        
-        var a = values
+
+        // Transpose row-major data to get the correct column-major layout for LAPACK.
+        // After LAPACK computes A^-1 in column-major, reading it back as row-major gives
+        // (A^-1)^T, so we transpose the result to recover A^-1.
+        var a = self.transpose().values
         var m = Int(rows)
         var n = Int(columns)
         var lda = m
         var pivots = [Int](repeating: 0, count: rows)
         var info: Int = 0
-        
-        // LU Factorization
+
         a.withUnsafeMutableBufferPointer { buffer in
-             zgetrf_(&m, &n, OpaquePointer(buffer.baseAddress!), &lda, &pivots, &info)
+            zgetrf_(&m, &n, OpaquePointer(buffer.baseAddress!), &lda, &pivots, &info)
         }
-        
+
         if info != 0 { throw MathError.unsupportedOperation(op: "inverse", typeA: "Singular Complex Matrix", typeB: nil) }
-        
-        // Inverse Calculation
+
         var work = [Complex](repeating: .zero, count: rows * rows)
         var lwork = Int(rows * rows)
-        
+
         a.withUnsafeMutableBufferPointer { buffer in
             work.withUnsafeMutableBufferPointer { workPtr in
-                 zgetri_(&n, OpaquePointer(buffer.baseAddress!), &lda, &pivots, OpaquePointer(workPtr.baseAddress!), &lwork, &info)
+                zgetri_(&n, OpaquePointer(buffer.baseAddress!), &lda, &pivots, OpaquePointer(workPtr.baseAddress!), &lwork, &info)
             }
         }
-        
+
         if info != 0 { throw MathError.solverFailed(reason: "Complex Inversion failed") }
-        
+
         let newDimensions = self.dimensions.mapValues { -$0 }.filter { $0.value != 0 }
-        return ComplexMatrix(values: a, rows: rows, columns: columns, dimensions: newDimensions)
+        // Column-major A^-1 read as row-major yields (A^-1)^T; transpose to get A^-1.
+        return ComplexMatrix(values: a, rows: rows, columns: columns, dimensions: newDimensions).transpose()
     }
     
     func transpose() -> ComplexMatrix {

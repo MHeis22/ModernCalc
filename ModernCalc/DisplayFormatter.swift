@@ -392,7 +392,7 @@ struct DisplayFormatter {
     }
 
 
-    static func formatForParsing(_ value: MathValue, with settings: UserSettings) -> String {
+    static func formatForParsing(_ value: MathValue, with settings: UserSettings, angleMode: AngleMode = .degrees) -> String {
         let argumentSeparator = settings.decimalSeparator == .period ? "," : "."
         switch value {
         case .dimensionless(let d): return formatScalarForParsing(d, with: settings)
@@ -475,7 +475,7 @@ struct DisplayFormatter {
             let unitStr = formatDimensionsForParsing(cm.dimensions) // Updated in Phase 3
             return unitStr.isEmpty ? content : "(\(content)) * (\(unitStr))" // Explicit multiplication
         case .functionDefinition: return "" // Cannot parse back
-        case .polar(let p): return formatPolarForParsing(p, with: settings) // Already handled
+        case .polar(let p): return formatPolarForParsing(p, with: settings, angleMode: angleMode)
         case .regressionResult: return "" // Cannot parse back
         case .polynomialFit(let polyCoeffs):
             return formatPolynomialForParsing(polyCoeffs, with: settings) // Already handled
@@ -1196,11 +1196,10 @@ struct DisplayFormatter {
     }
 
 
-    private static func formatPolarForParsing(_ value: Complex, with settings: UserSettings) -> String {
-        // Use ∠ symbol for parsing polar form
+    private static func formatPolarForParsing(_ value: Complex, with settings: UserSettings, angleMode: AngleMode = .degrees) -> String {
         let magnitude = value.abs()
-        // Always use degrees for parsing polar form for consistency
-        let angleDegrees = value.argument() * (180.0 / .pi)
-        return "\(formatScalarForParsing(magnitude, with: settings))∠\(formatScalarForParsing(angleDegrees, with: settings))"
+        let angleRad = value.argument()
+        let angleValue = angleMode == .degrees ? angleRad * (180.0 / .pi) : angleRad
+        return "\(formatScalarForParsing(magnitude, with: settings))∠\(formatScalarForParsing(angleValue, with: settings))"
     }
 }

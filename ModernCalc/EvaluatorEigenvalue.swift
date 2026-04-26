@@ -27,8 +27,8 @@ extension Evaluator {
         // Use var for mutable pointer passing required by LAPACK
         let n = Int(matrix.rows)
         
-        // LAPACK expects column-major. We pass our row-major matrix 'a'.
-        // Since Eigenvalues(A) == Eigenvalues(A^T), passing A as A^T doesn't change eigenvalues.
+        // LAPACK expects column-major. Transposing our row-major matrix gives the correct
+        // column-major layout: row-major(A^T) == column-major(A), so LAPACK sees A directly.
         var a = matrix.transpose().values
         
         // Arrays for real and imaginary parts of eigenvalues

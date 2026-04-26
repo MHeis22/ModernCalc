@@ -737,7 +737,7 @@ class CalculatorViewModel {
     }
     
     func formatForParsing(_ value: MathValue) -> String {
-        return DisplayFormatter.formatForParsing(value, with: self.settings)
+        return DisplayFormatter.formatForParsing(value, with: self.settings, angleMode: self.angleMode)
     }
     
     func formatScalarForDisplay(_ value: Double) -> String {

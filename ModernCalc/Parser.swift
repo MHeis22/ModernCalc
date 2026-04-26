@@ -788,7 +788,7 @@ class Parser {
         try advance()
     }
 
-    private func unaryOperatorPrecedence() -> Int { return 9 }
+    private func unaryOperatorPrecedence() -> Int { return 7 }
     private func implicitMultiplicationPrecedence() -> Int { return 6 }
     private func infixOperatorPrecedence(for token: Token) -> Int? {
         if case .op(let opString) = token.type {
