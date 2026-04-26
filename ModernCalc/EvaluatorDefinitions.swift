@@ -39,9 +39,8 @@ extension Evaluator {
         "sech": { 1.0 / cosh($0) },
         "csch": { 1.0 / sinh($0) },
         "coth": { 1.0 / tanh($0) },
-        "asech": { acosh(1.0 / $0) },
+        // acsch only: asech and acoth are handled by singleArgumentFunctions (domain checks + uncertain support)
         "acsch": { asinh(1.0 / $0) },
-        "acoth": { atanh(1.0 / $0) },
     ]
     
     static let variadicFunctions: [String: ([MathValue]) throws -> MathValue] = [
@@ -271,18 +270,40 @@ extension Evaluator {
             return .polynomialFit(coefficients: coeffs)
         },
         "normdist": { args in
-            guard args.count == 3 else { throw MathError.incorrectArgumentCount(function: "normdist", expected: "3", found: args.count) }
+            guard args.count == 3 || args.count == 4 else {
+                throw MathError.incorrectArgumentCount(function: "normdist", expected: "3 or 4", found: args.count)
+            }
             let x = try args[0].asScalar()
             let mean = try args[1].asScalar()
             let stddev = try args[2].asScalar()
-            return .dimensionless(normalDistribution(x: x, mean: mean, stddev: stddev))
+            // 4th arg: 1 (or omitted) → CDF, 0 → PDF
+            let cumulative = args.count == 4 ? (try args[3].asScalar() != 0) : true
+            if cumulative {
+                return .dimensionless(normalDistributionCDF(x: x, mean: mean, stddev: stddev))
+            } else {
+                return .dimensionless(normalDistributionPDF(x: x, mean: mean, stddev: stddev))
+            }
         },
         "binomdist": { args in
-            guard args.count == 3 else { throw MathError.incorrectArgumentCount(function: "binomdist", expected: "3", found: args.count) }
+            guard args.count == 3 || args.count == 4 else {
+                throw MathError.incorrectArgumentCount(function: "binomdist", expected: "3 or 4", found: args.count)
+            }
             let k = try args[0].asScalar()
             let n = try args[1].asScalar()
             let p = try args[2].asScalar()
-            return .dimensionless(try binomialDistribution(k: k, n: n, p: p))
+            // 4th arg: 0 (or omitted) → PMF P(X=k), 1 → CDF P(X≤k)
+            let cumulative = args.count == 4 ? (try args[3].asScalar() != 0) : false
+            if cumulative {
+                var sum = 0.0
+                var i = 0.0
+                while i <= k {
+                    sum += try binomialDistribution(k: i, n: n, p: p)
+                    i += 1
+                }
+                return .dimensionless(sum)
+            } else {
+                return .dimensionless(try binomialDistribution(k: k, n: n, p: p))
+            }
         },
         "random": { args in
             switch args.count {
@@ -371,15 +392,18 @@ extension Evaluator {
             let n = fftResult.dimension
             
             // Compute one-sided power spectrum: |X[k]|² / n
-            // Bins 1..(n/2-1) are doubled to account for the symmetric negative-frequency half.
-            let power: [Double] = fftResult.values.prefix(n / 2).enumerated().map { idx, c in
+            // DC (k=0) and Nyquist (k=n/2) are unique; interior bins 1..(n/2-1) are doubled
+            // to account for the conjugate-symmetric negative-frequency half.
+            let numBins = n / 2 + 1
+            let power: [Double] = fftResult.values.prefix(numBins).enumerated().map { idx, c in
                 let p = (c.abs() * c.abs()) / Double(n)
-                return idx == 0 ? p : 2 * p
+                let isEndBin = idx == 0 || idx == n / 2
+                return isEndBin ? p : 2 * p
             }
 
             // Create the corresponding frequency axis using the sampling rate
             let frequencyStep = samplingRateValue / Double(n)
-            let frequencies = (0..<n/2).map { Double($0) * frequencyStep }
+            let frequencies = (0..<numBins).map { Double($0) * frequencyStep }
 
             let dataPoints = zip(frequencies, power).map { DataPoint(x: $0, y: $1) }
 
@@ -1036,12 +1060,10 @@ extension Evaluator {
                 case "lg", "log": derivative = 1 / (val * Foundation.log(10))
                 case "sinh": derivative = cosh(val); case "cosh": derivative = sinh(val); case "tanh": derivative = 1 - pow(tanh(val), 2)
                 case "asinh": derivative = 1 / sqrt(pow(val, 2) + 1); case "acosh": derivative = 1 / sqrt(pow(val, 2) - 1); case "atanh": derivative = 1 / (1 - pow(val, 2))
-                case "sech": derivative = -tanh(val) * (1/cosh(val));
-                case "csch": derivative = -(1 / tanh(val)) * (1 / sinh(val));
-                case "coth": derivative = -pow(1/sinh(val), 2);
-                case "asech": derivative = -1 / (val * sqrt(1 - pow(val, 2)));
-                case "acsch": derivative = -1 / (abs(val) * sqrt(1 + pow(val, 2)));
-                case "acoth": derivative = 1 / (1 - pow(val, 2));
+                case "sech": derivative = -tanh(val) * (1/cosh(val))
+                case "csch": derivative = -(1 / tanh(val)) * (1 / sinh(val))
+                case "coth": derivative = -pow(1/sinh(val), 2)
+                case "acsch": derivative = -1 / (abs(val) * sqrt(1 + pow(val, 2)))
                 default: derivative = 0 // Should not be reached for functions in this map
                 }
                 let propagated = u.propagate(derivative: derivative)
@@ -1354,9 +1376,15 @@ fileprivate func performElementWiseIntegerOp(_ a: MathValue, _ b: MathValue, opN
     }
 }
 
-fileprivate func normalDistribution(x: Double, mean: Double, stddev: Double) -> Double {
+fileprivate func normalDistributionCDF(x: Double, mean: Double, stddev: Double) -> Double {
     guard stddev > 0 else { return Double.nan }
     return 0.5 * (1.0 + erf((x - mean) / (stddev * 2.0.squareRoot())))
+}
+
+fileprivate func normalDistributionPDF(x: Double, mean: Double, stddev: Double) -> Double {
+    guard stddev > 0 else { return Double.nan }
+    let z = (x - mean) / stddev
+    return Foundation.exp(-0.5 * z * z) / (stddev * (2.0 * Double.pi).squareRoot())
 }
 
 fileprivate func binomialDistribution(k: Double, n: Double, p: Double) throws -> Double {

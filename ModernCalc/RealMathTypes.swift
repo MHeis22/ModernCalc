@@ -92,19 +92,16 @@ struct UncertainValue: Equatable, Codable {
     static func * (lhs: UncertainValue, rhs: UncertainValue) -> UncertainValue {
         let newValue = lhs.value * rhs.value
         let newDimensions = lhs.dimensions.merging(rhs.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
-        
-        let relRandomL = lhs.value != 0 ? lhs.randomUncertainty / lhs.value : 0
-        let relRandomR = rhs.value != 0 ? rhs.randomUncertainty / rhs.value : 0
-        let combinedRelRandom = hypot(relRandomL, relRandomR)
-        
-        let relSystematicL = lhs.value != 0 ? lhs.systematicUncertainty / lhs.value : 0
-        let relSystematicR = rhs.value != 0 ? rhs.systematicUncertainty / rhs.value : 0
-        let combinedRelSystematic = hypot(relSystematicL, relSystematicR)
+
+        // Absolute propagation: σ_z = hypot(|y|·σ_x, |x|·σ_y)
+        // This is exact and correct even when either value is zero.
+        let newRandom = hypot(abs(rhs.value) * lhs.randomUncertainty, abs(lhs.value) * rhs.randomUncertainty)
+        let newSystematic = hypot(abs(rhs.value) * lhs.systematicUncertainty, abs(lhs.value) * rhs.systematicUncertainty)
 
         return UncertainValue(
             value: newValue,
-            randomUncertainty: abs(newValue * combinedRelRandom),
-            systematicUncertainty: abs(newValue * combinedRelSystematic),
+            randomUncertainty: newRandom,
+            systematicUncertainty: newSystematic,
             dimensions: newDimensions
         )
     }
@@ -114,30 +111,46 @@ struct UncertainValue: Equatable, Codable {
         let newValue = lhs.value / rhs.value
         let newDimensions = lhs.dimensions.merging(rhs.dimensions.mapValues { -$0 }, uniquingKeysWith: +).filter { $0.value != 0 }
 
-        let relRandomL = lhs.value != 0 ? lhs.randomUncertainty / lhs.value : 0
-        let relRandomR = rhs.randomUncertainty / rhs.value
-        let combinedRelRandom = hypot(relRandomL, relRandomR)
-        
-        let relSystematicL = lhs.value != 0 ? lhs.systematicUncertainty / lhs.value : 0
-        let relSystematicR = rhs.systematicUncertainty / rhs.value
-        let combinedRelSystematic = hypot(relSystematicL, relSystematicR)
+        // Absolute propagation: σ_z = hypot(σ_x, |z|·σ_y) / |y|
+        // Correct even when the numerator (lhs.value) is zero.
+        let absRhs = abs(rhs.value)
+        let newRandom = hypot(lhs.randomUncertainty, abs(newValue) * rhs.randomUncertainty) / absRhs
+        let newSystematic = hypot(lhs.systematicUncertainty, abs(newValue) * rhs.systematicUncertainty) / absRhs
 
         return UncertainValue(
             value: newValue,
-            randomUncertainty: abs(newValue * combinedRelRandom),
-            systematicUncertainty: abs(newValue * combinedRelSystematic),
+            randomUncertainty: newRandom,
+            systematicUncertainty: newSystematic,
             dimensions: newDimensions
         )
     }
     
     func pow(_ exponent: Double) -> UncertainValue {
-        if self.value == 0 { return self }
-        let newValue = Foundation.pow(self.value, exponent)
         let newDimensions = self.dimensions.mapValues { $0 * exponent }.filter { $0.value != 0 }
+        let randomRatio = self.totalUncertainty > 0 ? self.randomUncertainty / self.totalUncertainty : 0
+
+        if self.value == 0 {
+            // d/dx[x^n] at x=0: 0 for n>1, 1 for n=1, undefined (NaN) for n<1
+            let newTotalUncertainty: Double
+            if exponent > 1 {
+                newTotalUncertainty = 0.0
+            } else if exponent == 1 {
+                newTotalUncertainty = self.totalUncertainty
+            } else {
+                newTotalUncertainty = Double.nan
+            }
+            return UncertainValue(
+                value: Foundation.pow(0.0, exponent),
+                randomUncertainty: newTotalUncertainty * randomRatio,
+                systematicUncertainty: newTotalUncertainty * (1 - randomRatio),
+                dimensions: newDimensions
+            )
+        }
+
+        let newValue = Foundation.pow(self.value, exponent)
         let relativeUncertainty = self.totalUncertainty / self.value
         let newTotalUncertainty = abs(newValue * exponent * relativeUncertainty)
-        let randomRatio = self.totalUncertainty > 0 ? self.randomUncertainty / self.totalUncertainty : 0
-        
+
         return UncertainValue(
             value: newValue,
             randomUncertainty: newTotalUncertainty * randomRatio,
