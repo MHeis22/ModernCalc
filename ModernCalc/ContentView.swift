@@ -245,6 +245,16 @@ struct UnifiedInputView: View {
                         return expression
                     }
                 }()
+                
+                let selectedText: String = {
+                    let maxLen = expressionNSString.length - cursorPosition.location
+                    let safeLength = min(cursorPosition.length, max(0, maxLen))
+                    if safeLength > 0 {
+                        return expressionNSString.substring(with: NSRange(location: cursorPosition.location, length: safeLength))
+                    }
+                    return ""
+                }()
+                
                 let textAfterCursor: String = {
                     let selectionEnd = cursorPosition.location + cursorPosition.length
                     if selectionEnd <= expressionNSString.length {
@@ -264,6 +274,11 @@ struct UnifiedInputView: View {
                                     .foregroundColor(.secondary)
                             } else {
                                 Text(textBeforeCursor)
+                                
+                                if !selectedText.isEmpty {
+                                            Text(selectedText)
+                                                .foregroundColor(.white) // Ensures contrast against the native blue highlight box
+                                        }
                                 
                                 if !previewText.isEmpty {
                                     Text(previewText)
