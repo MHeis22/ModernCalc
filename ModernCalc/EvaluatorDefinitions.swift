@@ -140,8 +140,8 @@ extension Evaluator {
             guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "geomean") }
             guard values.allSatisfy({ $0 >= 0 }) else { throw MathError.unsupportedOperation(op: "geomean", typeA: "All values must be non-negative", typeB: nil) }
             if values.contains(0) { return .dimensionless(0) }
-            let product = values.reduce(1, *)
-            return .dimensionless(pow(product, 1.0 / Double(values.count)))
+            let logMean = values.map { log($0) }.reduce(0, +) / Double(values.count)
+            return .dimensionless(exp(logMean))
         },
         "harmean": { args in
             // Harmonic mean is tricky with units, so we'll enforce dimensionless for now
@@ -370,17 +370,21 @@ extension Evaluator {
             
             let n = fftResult.dimension
             
-            // Calculate magnitudes. For real inputs, the spectrum is symmetric, so we only need the first half.
-            let magnitudes = fftResult.values.prefix(n / 2).map { $0.abs() }
-            
+            // Compute one-sided power spectrum: |X[k]|² / n
+            // Bins 1..(n/2-1) are doubled to account for the symmetric negative-frequency half.
+            let power: [Double] = fftResult.values.prefix(n / 2).enumerated().map { idx, c in
+                let p = (c.abs() * c.abs()) / Double(n)
+                return idx == 0 ? p : 2 * p
+            }
+
             // Create the corresponding frequency axis using the sampling rate
             let frequencyStep = samplingRateValue / Double(n)
             let frequencies = (0..<n/2).map { Double($0) * frequencyStep }
-            
-            let dataPoints = zip(frequencies, magnitudes).map { DataPoint(x: $0, y: $1) }
-            
+
+            let dataPoints = zip(frequencies, power).map { DataPoint(x: $0, y: $1) }
+
             let series = PlotSeries(name: "Power Spectrum", dataPoints: dataPoints)
-            let plotData = PlotData(expression: "powerspectrum(...)", series: [series], plotType: .line, explicitYRange: nil, generationTime: 0, xAxisLabel: "Frequency (Hz)", yAxisLabel: "Magnitude")
+            let plotData = PlotData(expression: "powerspectrum(...)", series: [series], plotType: .line, explicitYRange: nil, generationTime: 0, xAxisLabel: "Frequency (Hz)", yAxisLabel: "Power")
             
             return .plot(plotData)
         },
@@ -632,6 +636,11 @@ extension Evaluator {
         },
         "deg2rad": { arg in let s = try arg.asScalar(); return .dimensionless(s * .pi / 180.0) },
         "rad2deg": { arg in let s = try arg.asScalar(); return .dimensionless(s * 180.0 / .pi) },
+        "asech": { arg in
+            let val = try arg.asScalar()
+            guard val > 0 && val <= 1 else { throw MathError.unsupportedOperation(op: "asech", typeA: "domain is 0 < x ≤ 1", typeB: nil) }
+            return .dimensionless(acosh(1.0 / val))
+        },
         "acoth": { arg in
             switch arg {
             case .uncertain(let u):
@@ -774,7 +783,9 @@ extension Evaluator {
                 }
                 return .uncertain(result)
             }
-            let a = asin(try args[0].asScalar()); return .dimensionless(mode == .degrees ? a * 180 / .pi : a)
+            let x = try args[0].asScalar()
+            guard abs(x) <= 1 else { throw MathError.unsupportedOperation(op: "asin", typeA: "domain is |x| ≤ 1", typeB: nil) }
+            let a = asin(x); return .dimensionless(mode == .degrees ? a * 180 / .pi : a)
         },
         "acos": { args, mode in
             if case .uncertain(let u) = args[0] {
@@ -782,7 +793,7 @@ extension Evaluator {
                 let val = u.value
                 let derivative = -1.0 / sqrt(1.0 - pow(val, 2))
                 let propagated = u.propagate(derivative: derivative)
-                
+
                 var result = UncertainValue(value: acos(val), randomUncertainty: propagated.randomUncertainty, systematicUncertainty: propagated.systematicUncertainty, dimensions: [:])
                 if mode == .degrees {
                     result.value *= 180 / .pi
@@ -791,7 +802,9 @@ extension Evaluator {
                 }
                 return .uncertain(result)
             }
-            let a = acos(try args[0].asScalar()); return .dimensionless(mode == .degrees ? a * 180 / .pi : a)
+            let x = try args[0].asScalar()
+            guard abs(x) <= 1 else { throw MathError.unsupportedOperation(op: "acos", typeA: "domain is |x| ≤ 1", typeB: nil) }
+            let a = acos(x); return .dimensionless(mode == .degrees ? a * 180 / .pi : a)
         },
         "atan": { args, mode in
             if case .uncertain(let u) = args[0] {
