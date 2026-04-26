@@ -631,7 +631,21 @@ extension Evaluator {
             return .vector(Vector(values: uniqueValues))
         },
         "deg2rad": { arg in let s = try arg.asScalar(); return .dimensionless(s * .pi / 180.0) },
-        "rad2deg": { arg in let s = try arg.asScalar(); return .dimensionless(s * 180.0 / .pi) }
+        "rad2deg": { arg in let s = try arg.asScalar(); return .dimensionless(s * 180.0 / .pi) },
+        "acoth": { arg in
+            switch arg {
+            case .uncertain(let u):
+                guard abs(u.value) > 1 else { throw MathError.unsupportedOperation(op: "acoth", typeA: "domain is |x| > 1", typeB: nil) }
+                let resultVal = atanh(1.0 / u.value)
+                let derivative = 1.0 / (1.0 - u.value * u.value)
+                let propagated = u.propagate(derivative: derivative)
+                return .uncertain(UncertainValue(value: resultVal, randomUncertainty: propagated.randomUncertainty, systematicUncertainty: propagated.systematicUncertainty, dimensions: [:]))
+            default:
+                let val = try arg.asScalar()
+                guard abs(val) > 1 else { throw MathError.unsupportedOperation(op: "acoth", typeA: "domain is |x| > 1", typeB: nil) }
+                return .dimensionless(atanh(1.0 / val))
+            }
+        }
     ]
     
     static let angleAwareFunctions: [String: ([MathValue], AngleMode) throws -> MathValue] = [
@@ -796,9 +810,17 @@ extension Evaluator {
             }
             let a = atan(try args[0].asScalar()); return .dimensionless(mode == .degrees ? a * 180 / .pi : a)
         },
-        "asec": { args, mode in let a = acos(1.0 / (try args[0].asScalar())); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
-        "acsc": { args, mode in let a = asin(1.0 / (try args[0].asScalar())); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
-        "acot": { args, mode in let a = atan(1.0 / (try args[0].asScalar())); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
+        "asec": { args, mode in
+            let x = try args[0].asScalar()
+            guard abs(x) >= 1 else { throw MathError.unsupportedOperation(op: "asec", typeA: "domain is |x| >= 1", typeB: nil) }
+            let a = acos(1.0 / x); return .dimensionless(mode == .degrees ? a * 180 / .pi : a)
+        },
+        "acsc": { args, mode in
+            let x = try args[0].asScalar()
+            guard abs(x) >= 1 else { throw MathError.unsupportedOperation(op: "acsc", typeA: "domain is |x| >= 1", typeB: nil) }
+            let a = asin(1.0 / x); return .dimensionless(mode == .degrees ? a * 180 / .pi : a)
+        },
+        "acot": { args, mode in let a = Double.pi / 2 - atan(try args[0].asScalar()); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
         "atan2": { args, mode in let a = Foundation.atan2(try args[0].asScalar(), try args[1].asScalar()); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
         "arg": { args, mode in
             guard args.count == 1, case .complex(let c) = args[0] else { throw MathError.typeMismatch(expected: "Complex", found: args.first?.typeName ?? "none") }
@@ -1321,10 +1343,7 @@ fileprivate func performElementWiseIntegerOp(_ a: MathValue, _ b: MathValue, opN
 
 fileprivate func normalDistribution(x: Double, mean: Double, stddev: Double) -> Double {
     guard stddev > 0 else { return Double.nan }
-    let variance = pow(stddev, 2)
-    let coefficient = 1.0 / sqrt(2.0 * .pi * variance)
-    let exponent = -pow(x - mean, 2) / (2.0 * variance)
-    return coefficient * exp(exponent)
+    return 0.5 * (1.0 + erf((x - mean) / (stddev * 2.0.squareRoot())))
 }
 
 fileprivate func binomialDistribution(k: Double, n: Double, p: Double) throws -> Double {
